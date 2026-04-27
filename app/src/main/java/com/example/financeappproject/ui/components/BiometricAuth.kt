@@ -1,5 +1,8 @@
 package com.example.financeappproject.ui.components
 
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricPrompt
@@ -19,10 +22,28 @@ class BiometricAuth(private val activity: FragmentActivity) {
      * @return true if strong biometrics are available, false otherwise
      */
     fun canAuthenticate(): Boolean {
-        return when (biometricManager.canAuthenticate(BIOMETRIC_STRONG)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> true
-            else -> false
+        return biometricManager.canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    /**
+     * Check if biometrics are supported but not enrolled.
+     */
+    fun isNotEnrolled(): Boolean {
+        return biometricManager.canAuthenticate(BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED
+    }
+
+    /**
+     * Opens system settings to allow the user to enroll biometrics (fingerprint/face).
+     */
+    fun promptEnrollment() {
+        val enrollIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Intent(Settings.ACTION_BIOMETRIC_ENROLL).apply {
+                putExtra(Settings.EXTRA_BIOMETRIC_AUTHENTICATORS_ALLOWED, BIOMETRIC_STRONG)
+            }
+        } else {
+            Intent(Settings.ACTION_SECURITY_SETTINGS)
         }
+        activity.startActivity(enrollIntent)
     }
 
     /**
@@ -31,11 +52,11 @@ class BiometricAuth(private val activity: FragmentActivity) {
     fun getBiometricStatusMessage(): String {
         return when (biometricManager.canAuthenticate(BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> "Biometrics available"
-            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "No biometric hardware"
-            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometric hardware unavailable"
-            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "No biometrics enrolled"
-            BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED -> "Security update required"
-            BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED -> "Biometrics unsupported"
+            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "No biometric hardware found"
+            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometric hardware is currently unavailable"
+            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "No biometrics enrolled. Please set up fingerprint or face in settings."
+            BiometricManager.BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED -> "A security update is required to use biometrics"
+            BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED -> "Biometrics are unsupported on this device"
             BiometricManager.BIOMETRIC_STATUS_UNKNOWN -> "Unknown biometric status"
             else -> "Biometrics unavailable"
         }
@@ -43,12 +64,6 @@ class BiometricAuth(private val activity: FragmentActivity) {
 
     /**
      * Authenticate the user using biometrics.
-     * @param title The title displayed in the biometric prompt
-     * @param subtitle The subtitle displayed in the biometric prompt
-     * @param negativeButtonText Text for the negative button (fallback)
-     * @param onSuccess Callback when authentication succeeds
-     * @param onError Callback when there's an authentication error
-     * @param onFailed Callback when authentication fails (wrong fingerprint etc.)
      */
     fun authenticate(
         title: String = "Biometric Login",
@@ -84,7 +99,11 @@ class BiometricAuth(private val activity: FragmentActivity) {
             .setAllowedAuthenticators(BIOMETRIC_STRONG)
             .build()
 
-        val biometricPrompt = BiometricPrompt(activity, executor, callback)
-        biometricPrompt.authenticate(promptInfo)
+        try {
+            val biometricPrompt = BiometricPrompt(activity, executor, callback)
+            biometricPrompt.authenticate(promptInfo)
+        } catch (e: Exception) {
+            onError(e.message ?: "Authentication failed to start")
+        }
     }
 }
