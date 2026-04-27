@@ -35,6 +35,7 @@ fun LoginScreen(
     
     // Initialize secure storage
     val secureStorage = remember { SecureStorage(context) }
+    val hasCredentials = remember { secureStorage.hasStoredCredentials() }
     
     // Check biometric availability on first composition
     LaunchedEffect(Unit) {
@@ -43,9 +44,9 @@ fun LoginScreen(
         }
     }
     
-    // Try biometric login on startup if credentials exist
+    // Try biometric login on startup if credentials exist AND biometric is enabled in settings
     LaunchedEffect(biometricAvailable) {
-        if (biometricAvailable && secureStorage.hasStoredCredentials()) {
+        if (biometricAvailable && hasCredentials && secureStorage.isBiometricEnabled()) {
             activity?.let { act ->
                 BiometricAuth(act).authenticate(
                     onSuccess = {
@@ -127,7 +128,7 @@ fun LoginScreen(
                             
                             // Store credentials securely for biometric login
                             secureStorage.saveCredentials(email, "stored_token")
-                            secureStorage.setBiometricEnabled(true)
+                            // We don't force enable biometrics here anymore, user should do it in settings
                             
                             onLoginSuccess()
                         } else {
@@ -156,8 +157,8 @@ fun LoginScreen(
             Text("Don't have an account? Register")
         }
         
-        // Biometric login button
-        if (biometricAvailable && secureStorage.hasStoredCredentials()) {
+        // Biometric login button - ONLY shown if credentials exist AND biometric is enabled
+        if (biometricAvailable && hasCredentials && secureStorage.isBiometricEnabled()) {
             Spacer(modifier = Modifier.height(16.dp))
             
             OutlinedButton(
