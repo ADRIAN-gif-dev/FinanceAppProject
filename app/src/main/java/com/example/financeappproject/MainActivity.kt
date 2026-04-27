@@ -12,16 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.financeappproject.ui.screens.DashboardScreen
-import com.example.financeappproject.ui.screens.LoginScreen
-import com.example.financeappproject.ui.screens.RegisterScreen
+import com.example.financeappproject.ui.screens.*
 import com.example.financeappproject.ui.theme.FinanceAppProjectTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Test code removed to prevent duplicate entries
         enableEdgeToEdge()
         setContent {
             FinanceAppProjectTheme {
@@ -66,13 +62,28 @@ fun FinanceApp() {
                 )
             }
             composable("dashboard") {
-                DashboardScreen(
-                    onLogout = {
-                        navController.navigate("login") {
-                            popUpTo("dashboard") { inclusive = true }
-                        }
-                    }
-                )
+                DashboardScreen(navController)
+            }
+            composable("budgets") {
+                BudgetScreen(navController)
+            }
+            composable("reports") {
+                ReportsScreen(navController)
+            }
+            composable("add_income") {
+                AddIncomeScreen(navController)
+            }
+            composable("add_expense") {
+                AddExpenseScreen(navController)
+            }
+            composable("add_debt") {
+                AddDebtScreen(navController)
+            }
+            composable("settings") {
+                SettingsScreen(navController)
+            }
+            composable("profile") {
+                ProfileScreen(navController)
             }
         }
     }

@@ -1,7 +1,7 @@
 package com.example.financeappproject.ui.components
 
-import android.content.Context
 import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -19,7 +19,7 @@ class BiometricAuth(private val activity: FragmentActivity) {
      * @return true if strong biometrics are available, false otherwise
      */
     fun canAuthenticate(): Boolean {
-        return when (biometricManager.canAuthenticate(BiometricPrompt.AUTHENTICATORS_BIOMETRIC_STRONG)) {
+        return when (biometricManager.canAuthenticate(BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> true
             else -> false
         }
@@ -29,7 +29,7 @@ class BiometricAuth(private val activity: FragmentActivity) {
      * Get a human-readable message for why biometrics are not available.
      */
     fun getBiometricStatusMessage(): String {
-        return when (biometricManager.canAuthenticate(BiometricPrompt.AUTHENTICATORS_BIOMETRIC_STRONG)) {
+        return when (biometricManager.canAuthenticate(BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> "Biometrics available"
             BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> "No biometric hardware"
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> "Biometric hardware unavailable"
@@ -81,7 +81,7 @@ class BiometricAuth(private val activity: FragmentActivity) {
             .setTitle(title)
             .setSubtitle(subtitle)
             .setNegativeButtonText(negativeButtonText)
-            .setAllowedAuthenticators(BiometricPrompt.AUTHENTICATORS_BIOMETRIC_STRONG)
+            .setAllowedAuthenticators(BIOMETRIC_STRONG)
             .build()
 
         val biometricPrompt = BiometricPrompt(activity, executor, callback)
