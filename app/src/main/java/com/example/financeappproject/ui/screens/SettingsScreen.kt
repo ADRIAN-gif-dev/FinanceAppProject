@@ -24,7 +24,14 @@ fun SettingsScreen(navController: NavController) {
     val biometricAuth = remember { activity?.let { BiometricAuth(it) } }
     
     var isBiometricEnabled by remember { mutableStateOf(secureStorage.isBiometricEnabled()) }
-    var biometricStatusMessage by remember { mutableStateOf(biometricAuth?.getBiometricStatusMessage() ?: "Biometrics not available") }
+    val hasCredentials = secureStorage.hasStoredCredentials()
+    
+    var biometricStatusMessage by remember { 
+        mutableStateOf(
+            if (!hasCredentials) "Register/Login first to use biometrics" 
+            else biometricAuth?.getBiometricStatusMessage() ?: "Biometrics not available"
+        ) 
+    }
     val isNotEnrolled = biometricAuth?.isNotEnrolled() ?: false
 
     Scaffold(
@@ -66,7 +73,7 @@ fun SettingsScreen(navController: NavController) {
                                 Text(
                                     biometricStatusMessage, 
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (isNotEnrolled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (!hasCredentials || isNotEnrolled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -85,11 +92,18 @@ fun SettingsScreen(navController: NavController) {
                                     secureStorage.setBiometricEnabled(false)
                                 }
                             },
-                            enabled = biometricAuth?.canAuthenticate() == true || isNotEnrolled
+                            enabled = hasCredentials && (biometricAuth?.canAuthenticate() == true || isNotEnrolled)
                         )
                     }
                     
-                    if (isNotEnrolled) {
+                    if (!hasCredentials) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "You must be logged in with a password before enabling biometric login.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else if (isNotEnrolled) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = { biometricAuth?.promptEnrollment() },
