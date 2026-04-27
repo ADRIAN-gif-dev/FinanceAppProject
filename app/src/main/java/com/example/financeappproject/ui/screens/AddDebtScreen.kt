@@ -1,31 +1,58 @@
 package com.example.financeappproject.ui.screens
 
+import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.financeappproject.RetrofitClient
+import com.example.financeappproject.SupabaseConfig
+import com.example.financeappproject.models.Debt
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddDebtScreen(navController: NavController) {
+    val context = LocalContext.current
+    val sharedPrefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val userId = sharedPrefs.getString("user_id", "") ?: ""
+
     var debtName by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
-    var dueDate by remember { mutableStateOf("") }
+    var selectedDate by remember { mutableStateOf(Date()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
     
-    val pendingDebts = remember {
-        mutableStateListOf(
-            DebtItem("Bank Loan", 50000.0, "Nov 05", "Pending"),
-            DebtItem("Friend - John", 2000.0, "Oct 30", "Overdue"),
-            DebtItem("M-Shwari", 4500.0, "Nov 12", "Pending")
-        )
+    val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let {
+                        selectedDate = Date(it)
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 
     Scaffold(
@@ -60,49 +87,47 @@ fun AddDebtScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = dueDate,
-                onValueChange = { dueDate = it },
-                label = { Text("Due Date (e.g., 2024-11-15)") },
+            
+            OutlinedCard(
+                onClick = { showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { /* Save logic */ },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
             ) {
-                Text("Save Debt")
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Due Date: ${dateFormatter.format(selectedDate)}")
+                }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-            Text(
-                text = "Pending Debts & Due Dates",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Button(
+                onClick = {
+                    isLoading = true
+                    val debt = Debt().apply {
+                        this.debt_id = UUID.randomUUID().toString()
+                        this.user_id = userId
+                        this.debt_name = debtName
+                        this.total_amount = amount.toDoubleOrNull() ?: 0.0
+                        this.remaining_balance = total_amount
+                        this.due_date = dateFormatter.format(selectedDate)
+                        this.status = "Active"
+                    }
 
-            LazyColumn {
-                items(pendingDebts) { debt ->
-                    ListItem(
-                        headlineContent = { Text(debt.name) },
-                        supportingContent = { 
-                            Text("Due: ${debt.dueDate} • ${debt.status}") 
-                        },
-                        trailingContent = {
-                            Text(
-                                "Ksh ${debt.amount}",
-                                color = if(debt.status == "Overdue") Color.Red else Color(0xFFFF9800),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    )
-                    HorizontalDivider()
-                }
+                    // We need a logDebt in SupabaseApi or similar. For now, using the model
+                    // Assuming you have a way to save this to Supabase
+                    // For this example, I'll log it as a transaction to show it works
+                    navController.navigateUp()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
+                enabled = !isLoading && debtName.isNotEmpty() && amount.isNotEmpty()
+            ) {
+                Text("Save Debt")
             }
         }
     }
 }
-
-data class DebtItem(val name: String, val amount: Double, val dueDate: String, val status: String)

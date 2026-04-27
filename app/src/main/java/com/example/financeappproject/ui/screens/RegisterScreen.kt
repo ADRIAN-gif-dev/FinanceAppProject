@@ -6,11 +6,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.financeappproject.RetrofitClient
 import com.example.financeappproject.SupabaseConfig
 import com.example.financeappproject.models.User
+import com.example.financeappproject.ui.components.SecureStorage
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -21,13 +23,14 @@ fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit
 ) {
-    // State for UI fields
-    var name by remember { mutableStateOf("") } // Added Name to match your Database
+    val context = LocalContext.current
+    val secureStorage = remember { SecureStorage(context) }
+    
+    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
 
-    // UI Feedback states
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -42,7 +45,6 @@ fun RegisterScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Name Field (Required by your Schema!)
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
@@ -100,27 +102,28 @@ fun RegisterScreen(
                 isLoading = true
                 errorMessage = null
 
-                // 1. Prepare the User Model
                 val newUser = User().apply {
                     this.user_id = UUID.randomUUID().toString()
                     this.name = name
                     this.email = email
-                    this.password_hash = password // In production, we'd hash this!
+                    this.password_hash = password
                     this.biometric_token = "none"
                 }
 
-                // 2. Use your Supabase Bridge
                 val api = RetrofitClient.getSupabaseApi()
                 api.createUser(SupabaseConfig.API_KEY, "Bearer ${SupabaseConfig.API_KEY}", newUser)
                     .enqueue(object : Callback<Void?> {
                         override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
                             isLoading = false
                             if (response.isSuccessful) {
-                                Log.d("REGISTER_SUCCESS", "User saved to Supabase!")
+                                // Store the user name for greetings
+                                secureStorage.saveCredentials(email, "stored_token")
+                                // Hacky way to store just the name for now without a full User session manager
+                                val sharedPrefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
+                                sharedPrefs.edit().putString("user_name", name).apply()
+                                
                                 onRegisterSuccess()
                             } else {
-                                val errorMsg = "Error ${response.code()}: ${response.message()}"
-                                Log.e("REGISTER_ERROR", errorMsg)
                                 errorMessage = "Registration failed. Try again."
                             }
                         }
@@ -128,12 +131,11 @@ fun RegisterScreen(
                         override fun onFailure(call: Call<Void?>, t: Throwable) {
                             isLoading = false
                             errorMessage = "Connection error: ${t.message}"
-                            Log.e("REGISTER_FAILURE", t.message ?: "Unknown error")
                         }
                     })
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading && email.isNotEmpty() && password.isNotEmpty()
+            enabled = !isLoading && email.isNotEmpty() && password.isNotEmpty() && name.isNotEmpty()
         ) {
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
