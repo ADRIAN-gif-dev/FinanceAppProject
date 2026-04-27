@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
+from .models import Expense
 
 class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
@@ -10,3 +11,13 @@ class RegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         return user
+    
+class ExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = ['id', 'title', 'amount', 'category', 'date']
+
+    def validate_amount(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Expense amount cannot be negative.")
+        return value

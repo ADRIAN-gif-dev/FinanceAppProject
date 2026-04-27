@@ -6,11 +6,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import com.example.financeappproject.RetrofitClient
 import com.example.financeappproject.SupabaseConfig
 import com.example.financeappproject.models.User
+import com.example.financeappproject.ui.components.BiometricAuth
+import com.example.financeappproject.ui.components.SecureStorage
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -20,10 +24,45 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToRegister: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var biometricAvailable by remember { mutableStateOf(false) }
+    
+    // Initialize secure storage
+    val secureStorage = remember { SecureStorage(context) }
+    
+    // Check biometric availability on first composition
+    LaunchedEffect(Unit) {
+        activity?.let {
+            biometricAvailable = BiometricAuth(it).canAuthenticate()
+        }
+    }
+    
+    // Try biometric login on startup if credentials exist
+    LaunchedEffect(biometricAvailable) {
+        if (biometricAvailable && secureStorage.hasStoredCredentials()) {
+            activity?.let { act ->
+                BiometricAuth(act).authenticate(
+                    onSuccess = {
+                        // Credentials already stored, auto-login
+                        Log.d("BIOMETRIC", "Biometric success, using stored credentials")
+                        onLoginSuccess()
+                    },
+                    onError = { error ->
+                        Log.d("BIOMETRIC", "Error: $error")
+                    },
+                    onFailed = {
+                        Log.d("BIOMETRIC", "Authentication failed")
+                    }
+                )
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -85,6 +124,11 @@ fun LoginScreen(
                         if (response.isSuccessful && !userList.isNullOrEmpty()) {
                             // Success: At least one matching user was found!
                             Log.d("LOGIN", "Welcome back, ${userList[0].name}")
+                            
+                            // Store credentials securely for biometric login
+                            secureStorage.saveCredentials(email, "stored_token")
+                            secureStorage.setBiometricEnabled(true)
+                            
                             onLoginSuccess()
                         } else {
                             // Failure: No user found or wrong password
@@ -110,6 +154,33 @@ fun LoginScreen(
 
         TextButton(onClick = onNavigateToRegister, enabled = !isLoading) {
             Text("Don't have an account? Register")
+        }
+        
+        // Biometric login button
+        if (biometricAvailable && secureStorage.hasStoredCredentials()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            OutlinedButton(
+                onClick = {
+                    activity?.let { act ->
+                        BiometricAuth(act).authenticate(
+                            onSuccess = {
+                                Log.d("BIOMETRIC", "Biometric login successful")
+                                onLoginSuccess()
+                            },
+                            onError = { error ->
+                                errorMessage = error
+                            },
+                            onFailed = {
+                                errorMessage = "Biometric authentication failed. Try again."
+                            }
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Use Biometric Login")
+            }
         }
     }
 }
