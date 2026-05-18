@@ -2,6 +2,7 @@ package com.example.financeappproject.ui.screens
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -77,19 +78,21 @@ fun AddDebtScreen(navController: NavController) {
                 value = debtName,
                 onValueChange = { debtName = it },
                 label = { Text("Debt Name (e.g., Bank Loan)") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
                 label = { Text("Amount (Ksh)") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading
             )
             Spacer(modifier = Modifier.height(8.dp))
             
             OutlinedCard(
-                onClick = { showDatePicker = true },
+                onClick = { if (!isLoading) showDatePicker = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -117,16 +120,35 @@ fun AddDebtScreen(navController: NavController) {
                         this.status = "Active"
                     }
 
-                    // We need a logDebt in SupabaseApi or similar. For now, using the model
-                    // Assuming you have a way to save this to Supabase
-                    // For this example, I'll log it as a transaction to show it works
-                    navController.navigateUp()
+                    RetrofitClient.getSupabaseApi().createDebt(
+                        SupabaseConfig.API_KEY,
+                        "Bearer ${SupabaseConfig.API_KEY}",
+                        debt
+                    ).enqueue(object : Callback<Void?> {
+                        override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
+                            isLoading = false
+                            if (response.isSuccessful) {
+                                sharedPrefs.edit().putBoolean("has_real_data", true).apply()
+                                navController.navigateUp()
+                            } else {
+                                Log.e("API_ERROR", "Response failed: ${response.code()}")
+                                Toast.makeText(context, "Error saving debt", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+
+                        override fun onFailure(call: Call<Void?>, t: Throwable) {
+                            isLoading = false
+                            Log.e("API_ERROR", t.message ?: "Unknown error")
+                            Toast.makeText(context, "Connection failed", Toast.LENGTH_SHORT).show()
+                        }
+                    })
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800)),
                 enabled = !isLoading && debtName.isNotEmpty() && amount.isNotEmpty()
             ) {
-                Text("Save Debt")
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
+                else Text("Save Debt")
             }
         }
     }

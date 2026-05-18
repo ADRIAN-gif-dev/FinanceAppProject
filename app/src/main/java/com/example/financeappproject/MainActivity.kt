@@ -64,6 +64,15 @@ fun FinanceApp() {
             composable("dashboard") {
                 DashboardScreen(navController)
             }
+            // --- NEW AI CHAT NAVIGATION ROUTE START ---
+            composable("chat") {
+                ChatScreen(
+                    onNavigateBack = {
+                        navController.navigateUp()
+                    }
+                )
+            }
+            // --- NEW AI CHAT NAVIGATION ROUTE END ---
             composable("budgets") {
                 BudgetScreen(navController)
             }

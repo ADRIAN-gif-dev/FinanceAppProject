@@ -2,9 +2,8 @@ package com.example.financeappproject.ui.screens
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -14,7 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.financeappproject.RetrofitClient
@@ -96,20 +94,20 @@ fun AddExpenseScreen(navController: NavController) {
             
             Text("Status", style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = status == "Paid", onClick = { status = "Paid" })
+                RadioButton(selected = status == "Paid", onClick = { status = "Paid" }, enabled = !isLoading)
                 Text("Paid")
                 Spacer(modifier = Modifier.width(8.dp))
-                RadioButton(selected = status == "Due", onClick = { status = "Due" })
+                RadioButton(selected = status == "Due", onClick = { status = "Due" }, enabled = !isLoading)
                 Text("Due")
                 Spacer(modifier = Modifier.width(8.dp))
-                RadioButton(selected = status == "Pending", onClick = { status = "Pending" })
+                RadioButton(selected = status == "Pending", onClick = { status = "Pending" }, enabled = !isLoading)
                 Text("Pending")
             }
 
             if (status == "Due") {
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedCard(
-                    onClick = { showDatePicker = true },
+                    onClick = { if (!isLoading) showDatePicker = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -129,7 +127,9 @@ fun AddExpenseScreen(navController: NavController) {
                 onClick = {
                     isLoading = true
                     val transaction = Transactions().apply {
-                        this.source_id = UUID.randomUUID().toString()
+                        this.trans_id = UUID.randomUUID().toString()
+                        this.type = "Expense"
+                        this.source_id = UUID.randomUUID().toString() // Should link to category/source
                         this.user_id = userId
                         this.amount = -(amount.toDoubleOrNull() ?: 0.0)
                         this.timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(selectedDate)
@@ -145,12 +145,16 @@ fun AddExpenseScreen(navController: NavController) {
                             if (response.isSuccessful) {
                                 sharedPrefs.edit().putBoolean("has_real_data", true).apply()
                                 navController.navigateUp()
+                            } else {
+                                Log.e("API_ERROR", "Response failed: ${response.code()} ${response.message()}")
+                                Toast.makeText(context, "Error saving expense", Toast.LENGTH_SHORT).show()
                             }
                         }
 
                         override fun onFailure(call: Call<Void?>, t: Throwable) {
                             isLoading = false
                             Log.e("API_ERROR", t.message ?: "Unknown error")
+                            Toast.makeText(context, "Failed to connect to server", Toast.LENGTH_SHORT).show()
                         }
                     })
                 },
@@ -158,7 +162,7 @@ fun AddExpenseScreen(navController: NavController) {
                 enabled = !isLoading && amount.isNotEmpty() && category.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
-                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                 else Text("Save Expense")
             }
         }

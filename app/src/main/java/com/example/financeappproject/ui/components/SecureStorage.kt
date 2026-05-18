@@ -7,12 +7,13 @@ import androidx.security.crypto.MasterKey
 
 /**
  * Secure storage for authentication credentials using encrypted shared preferences.
- * Uses AES-256 encryption to protect sensitive data like auth tokens and user email.
  */
 class SecureStorage(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "secure_prefs"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_AUTH_TOKEN = "auth_token"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
@@ -30,19 +31,22 @@ class SecureStorage(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    fun saveCredentials(email: String, token: String) {
+    fun saveCredentials(userId: String, name: String, email: String, token: String) {
         prefs.edit()
+            .putString(KEY_USER_ID, userId)
+            .putString(KEY_USER_NAME, name)
             .putString(KEY_USER_EMAIL, email)
             .putString(KEY_AUTH_TOKEN, token)
             .apply()
     }
 
+    fun getUserId(): String? = prefs.getString(KEY_USER_ID, null)
+    fun getUserName(): String? = prefs.getString(KEY_USER_NAME, null)
+    fun getEmail(): String? = prefs.getString(KEY_USER_EMAIL, null)
     fun getToken(): String? = prefs.getString(KEY_AUTH_TOKEN, null)
 
-    fun getEmail(): String? = prefs.getString(KEY_USER_EMAIL, null)
-
     fun hasStoredCredentials(): Boolean {
-        return getEmail() != null && getToken() != null
+        return getUserId() != null && getEmail() != null
     }
 
     fun setBiometricEnabled(enabled: Boolean) {
@@ -60,6 +64,8 @@ class SecureStorage(context: Context) {
     fun clearAuthData() {
         val biometricEnabled = isBiometricEnabled()
         prefs.edit()
+            .remove(KEY_USER_ID)
+            .remove(KEY_USER_NAME)
             .remove(KEY_USER_EMAIL)
             .remove(KEY_AUTH_TOKEN)
             .apply()

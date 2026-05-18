@@ -13,13 +13,14 @@ import retrofit2.http.Query;
 public interface SupabaseApi {
 
     // USER AUTHENTICATION
-    @GET("rest/v1/users")
+    @GET("rest/v1/users?select=*")
     Call<List<User>> loginUser(
             @Header("apikey") String apiKey,
             @Header("Authorization") String authToken,
             @Query("email") String email,
             @Query("password_hash") String password
     );
+
     @POST("rest/v1/users")
     Call<Void> createUser(
             @Header("apikey") String apiKey,
@@ -27,8 +28,8 @@ public interface SupabaseApi {
             @Body User user
     );
 
-    //  BUDGET MANAGEMENT
-    @GET("rest/v1/budgets")
+    // BUDGET MANAGEMENT
+    @GET("rest/v1/budgets?select=*")
     Call<List<Budget>> getBudgets(
             @Header("apikey") String apiKey,
             @Header("Authorization") String authToken,
@@ -42,7 +43,37 @@ public interface SupabaseApi {
             @Body Budget budget
     );
 
-    // --- TRANSACTION LOGGING ---
+    // DEBT MANAGEMENT
+    @GET("rest/v1/debts?select=*")
+    Call<List<Debt>> getDebts(
+            @Header("apikey") String apiKey,
+            @Header("Authorization") String authToken,
+            @Query("user_id") String userIdFilter
+    );
+
+    @POST("rest/v1/debts")
+    Call<Void> createDebt(
+            @Header("apikey") String apiKey,
+            @Header("Authorization") String authToken,
+            @Body Debt debt
+    );
+
+    // FUND MANAGEMENT
+    @POST("rest/v1/funds")
+    Call<Void> createFund(
+            @Header("apikey") String apiKey,
+            @Header("Authorization") String authToken,
+            @Body Fund fund
+    );
+
+    // TRANSACTION LOGGING
+    @GET("rest/v1/transactions?select=*")
+    Call<List<Transactions>> getTransactions(
+            @Header("apikey") String apiKey,
+            @Header("Authorization") String authToken,
+            @Query("user_id") String userIdFilter
+    );
+
     @POST("rest/v1/transactions")
     Call<Void> logTransaction(
             @Header("apikey") String apiKey,

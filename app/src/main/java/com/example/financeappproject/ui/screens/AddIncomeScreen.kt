@@ -2,6 +2,7 @@ package com.example.financeappproject.ui.screens
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -75,7 +76,9 @@ fun AddIncomeScreen(navController: NavController) {
                 onClick = {
                     isLoading = true
                     val transaction = Transactions().apply {
-                        this.source_id = UUID.randomUUID().toString()
+                        this.trans_id = UUID.randomUUID().toString()
+                        this.type = "Income"
+                        this.source_id = UUID.randomUUID().toString() // Should ideally be related to the source
                         this.user_id = userId
                         this.amount = amount.toDoubleOrNull() ?: 0.0
                         this.timestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
@@ -89,22 +92,25 @@ fun AddIncomeScreen(navController: NavController) {
                         override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
                             isLoading = false
                             if (response.isSuccessful) {
-                                // Clear dummy data flag if this is the first transaction
                                 sharedPrefs.edit().putBoolean("has_real_data", true).apply()
                                 navController.navigateUp()
+                            } else {
+                                Log.e("API_ERROR", "Response failed: ${response.code()} ${response.message()}")
+                                Toast.makeText(context, "Error: ${response.message()}", Toast.LENGTH_SHORT).show()
                             }
                         }
 
                         override fun onFailure(call: Call<Void?>, t: Throwable) {
                             isLoading = false
                             Log.e("API_ERROR", t.message ?: "Unknown error")
+                            Toast.makeText(context, "Failed to connect to server", Toast.LENGTH_SHORT).show()
                         }
                     })
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isLoading && amount.isNotEmpty() && source.isNotEmpty()
             ) {
-                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                 else Text("Save Income")
             }
 

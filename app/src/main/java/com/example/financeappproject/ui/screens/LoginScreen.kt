@@ -1,5 +1,6 @@
 package com.example.financeappproject.ui.screens
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -26,6 +27,8 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? FragmentActivity
+    val sharedPrefs = remember { context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE) }
+    val secureStorage = remember { SecureStorage(context) }
     
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -33,33 +36,33 @@ fun LoginScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var biometricAvailable by remember { mutableStateOf(false) }
     
-    // Initialize secure storage
-    val secureStorage = remember { SecureStorage(context) }
     val hasCredentials = remember { secureStorage.hasStoredCredentials() }
     
-    // Check biometric availability on first composition
+    // Check biometric availability
     LaunchedEffect(Unit) {
         activity?.let {
             biometricAvailable = BiometricAuth(it).canAuthenticate()
         }
     }
     
-    // Try biometric login on startup if credentials exist AND biometric is enabled in settings
+    // Auto-login via Biometrics if enabled
     LaunchedEffect(biometricAvailable) {
         if (biometricAvailable && hasCredentials && secureStorage.isBiometricEnabled()) {
             activity?.let { act ->
                 BiometricAuth(act).authenticate(
                     onSuccess = {
-                        // Credentials already stored, auto-login
-                        Log.d("BIOMETRIC", "Biometric success, using stored credentials")
+                        Log.d("BIOMETRIC", "Biometric success, restoring session")
+                        // Restore session into shared prefs for other screens
+                        sharedPrefs.edit().apply {
+                            putString("user_id", secureStorage.getUserId())
+                            putString("user_name", secureStorage.getUserName())
+                            putString("user_email", secureStorage.getEmail())
+                            apply()
+                        }
                         onLoginSuccess()
                     },
-                    onError = { error ->
-                        Log.d("BIOMETRIC", "Error: $error")
-                    },
-                    onFailed = {
-                        Log.d("BIOMETRIC", "Authentication failed")
-                    }
+                    onError = { error -> Log.d("BIOMETRIC", "Error: $error") },
+                    onFailed = { Log.d("BIOMETRIC", "Authentication failed") }
                 )
             }
         }
@@ -110,9 +113,7 @@ fun LoginScreen(
                 isLoading = true
                 errorMessage = null
 
-                val api = RetrofitClient.getSupabaseApi()
-                // We search the database for a matching email AND password
-                api.loginUser(
+                RetrofitClient.getSupabaseApi().loginUser(
                     SupabaseConfig.API_KEY,
                     "Bearer ${SupabaseConfig.API_KEY}",
                     "eq.$email",
@@ -123,16 +124,26 @@ fun LoginScreen(
                         val userList = response.body()
 
                         if (response.isSuccessful && !userList.isNullOrEmpty()) {
-                            // Success: At least one matching user was found!
-                            Log.d("LOGIN", "Welcome back, ${userList[0].name}")
+                            val user = userList[0]
                             
-                            // Store credentials securely for biometric login
-                            secureStorage.saveCredentials(email, "stored_token")
-                            // We don't force enable biometrics here anymore, user should do it in settings
+                            // 1. Save to session SharedPreferences for the app's current run
+                            sharedPrefs.edit().apply {
+                                putString("user_id", user.user_id)
+                                putString("user_name", user.name)
+                                putString("user_email", user.email)
+                                apply()
+                            }
+                            
+                            // 2. Store securely for future biometric logins
+                            secureStorage.saveCredentials(
+                                userId = user.user_id,
+                                name = user.name,
+                                email = user.email,
+                                token = "session_token_${user.user_id}" 
+                            )
                             
                             onLoginSuccess()
                         } else {
-                            // Failure: No user found or wrong password
                             errorMessage = "Invalid email or password"
                         }
                     }
@@ -146,35 +157,31 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading && email.isNotEmpty() && password.isNotEmpty()
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary)
-            } else {
-                Text("Login")
-            }
+            if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            else Text("Login")
         }
 
         TextButton(onClick = onNavigateToRegister, enabled = !isLoading) {
             Text("Don't have an account? Register")
         }
         
-        // Biometric login button - ONLY shown if credentials exist AND biometric is enabled
         if (biometricAvailable && hasCredentials && secureStorage.isBiometricEnabled()) {
             Spacer(modifier = Modifier.height(16.dp))
-            
             OutlinedButton(
                 onClick = {
                     activity?.let { act ->
                         BiometricAuth(act).authenticate(
                             onSuccess = {
-                                Log.d("BIOMETRIC", "Biometric login successful")
+                                sharedPrefs.edit().apply {
+                                    putString("user_id", secureStorage.getUserId())
+                                    putString("user_name", secureStorage.getUserName())
+                                    putString("user_email", secureStorage.getEmail())
+                                    apply()
+                                }
                                 onLoginSuccess()
                             },
-                            onError = { error ->
-                                errorMessage = error
-                            },
-                            onFailed = {
-                                errorMessage = "Biometric authentication failed. Try again."
-                            }
+                            onError = { errorMessage = it },
+                            onFailed = { errorMessage = "Biometric authentication failed" }
                         )
                     }
                 },

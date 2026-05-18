@@ -1,5 +1,8 @@
 package com.example.financeappproject.ui.screens
 
+import android.content.Context
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,16 +15,51 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.financeappproject.RetrofitClient
+import com.example.financeappproject.SupabaseConfig
+import com.example.financeappproject.models.Budget
 import com.example.financeappproject.ui.components.FinanceBottomBar
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BudgetScreen(navController: NavController) {
+    val context = LocalContext.current
+    val sharedPrefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+    val userId = sharedPrefs.getString("user_id", "") ?: ""
+
     var showAddCategoryDialog by remember { mutableStateOf(false) }
-    val categories = remember { mutableStateListOf<BudgetCategory>() }
+    val categories = remember { mutableStateListOf<Budget>() }
+    var isLoading by remember { mutableStateOf(false) }
+
+    // Fetch budgets on load
+    LaunchedEffect(Unit) {
+        isLoading = true
+        RetrofitClient.getSupabaseApi().getBudgets(
+            SupabaseConfig.API_KEY,
+            "Bearer ${SupabaseConfig.API_KEY}",
+            "eq.$userId"
+        ).enqueue(object : Callback<List<Budget>> {
+            override fun onResponse(call: Call<List<Budget>>, response: Response<List<Budget>>) {
+                isLoading = false
+                if (response.isSuccessful && response.body() != null) {
+                    categories.clear()
+                    categories.addAll(response.body()!!)
+                }
+            }
+            override fun onFailure(call: Call<List<Budget>>, t: Throwable) {
+                isLoading = false
+                Log.e("API_ERROR", t.message ?: "Error fetching budgets")
+            }
+        })
+    }
 
     Scaffold(
         topBar = {
@@ -41,29 +79,24 @@ fun BudgetScreen(navController: NavController) {
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            if (categories.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No budget categories yet. Tap + to add one.", style = MaterialTheme.typography.bodyLarge)
-                    }
+        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            if (isLoading && categories.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (categories.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No budget categories yet. Tap + to add one.", style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
-                items(categories) { category ->
-                    BudgetCategoryCard(
-                        category = category,
-                        onAddItem = { itemName, itemAmount ->
-                            category.items.add(BudgetItem(itemName, itemAmount))
-                            category.spentAmount += itemAmount
-                        },
-                        onDeleteCategory = { categories.remove(category) }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                ) {
+                    items(categories) { budget ->
+                        BudgetCategoryCard(
+                            budget = budget,
+                            onDeleteCategory = { categories.remove(budget) }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
             }
         }
@@ -73,7 +106,31 @@ fun BudgetScreen(navController: NavController) {
         AddCategoryDialog(
             onDismiss = { showAddCategoryDialog = false },
             onConfirm = { name, limit ->
-                categories.add(BudgetCategory(name, limit))
+                val newBudget = Budget().apply {
+                    this.budget_id = UUID.randomUUID().toString()
+                    this.user_id = userId
+                    this.category_name = name
+                    this.monthly_limit = limit
+                    this.current_spend = 0.0
+                }
+
+                RetrofitClient.getSupabaseApi().createBudget(
+                    SupabaseConfig.API_KEY,
+                    "Bearer ${SupabaseConfig.API_KEY}",
+                    newBudget
+                ).enqueue(object : Callback<Void?> {
+                    override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
+                        if (response.isSuccessful) {
+                            categories.add(newBudget)
+                            sharedPrefs.edit().putBoolean("has_real_data", true).apply()
+                        } else {
+                            Toast.makeText(context, "Failed to create budget", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    override fun onFailure(call: Call<Void?>, t: Throwable) {
+                        Toast.makeText(context, "Network error", Toast.LENGTH_SHORT).show()
+                    }
+                })
                 showAddCategoryDialog = false
             }
         )
@@ -82,12 +139,10 @@ fun BudgetScreen(navController: NavController) {
 
 @Composable
 fun BudgetCategoryCard(
-    category: BudgetCategory,
-    onAddItem: (String, Double) -> Unit,
+    budget: Budget,
     onDeleteCategory: () -> Unit
 ) {
-    var showAddItemDialog by remember { mutableStateOf(false) }
-    val remaining = category.limit - category.spentAmount
+    val remaining = budget.monthly_limit - budget.current_spend
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -99,7 +154,7 @@ fun BudgetCategoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = category.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(text = budget.category_name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 IconButton(onClick = onDeleteCategory) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete Category", tint = MaterialTheme.colorScheme.error)
                 }
@@ -107,7 +162,6 @@ fun BudgetCategoryCard(
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // Budget Summary Card
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = if (remaining >= 0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer
@@ -115,8 +169,8 @@ fun BudgetCategoryCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Budget: Ksh ${category.limit}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Spent: Ksh ${category.spentAmount}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Budget: Ksh ${budget.monthly_limit}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Spent: Ksh ${budget.current_spend}", style = MaterialTheme.typography.bodyMedium)
                     Text(
                         "Remaining: Ksh $remaining",
                         style = MaterialTheme.typography.bodyLarge,
@@ -125,39 +179,7 @@ fun BudgetCategoryCard(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            category.items.forEach { item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(item.name)
-                    Text("Ksh ${item.amount}", fontWeight = FontWeight.Bold)
-                }
-                HorizontalDivider()
-            }
-
-            TextButton(
-                onClick = { showAddItemDialog = true },
-                modifier = Modifier.align(Alignment.End)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Add Item")
-            }
         }
-    }
-
-    if (showAddItemDialog) {
-        AddItemDialog(
-            onDismiss = { showAddItemDialog = false },
-            onConfirm = { name, amount ->
-                onAddItem(name, amount)
-                showAddItemDialog = false
-            }
-        )
     }
 }
 
@@ -184,36 +206,3 @@ fun AddCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit
         }
     )
 }
-
-@Composable
-fun AddItemDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Item to Budget") },
-        text = {
-            Column {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Item Name") })
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount (Ksh)") })
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(name, amount.toDoubleOrNull() ?: 0.0) }) { Text("Add") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-data class BudgetCategory(
-    val name: String,
-    val limit: Double,
-    var spentAmount: Double = 0.0,
-    val items: MutableList<BudgetItem> = mutableStateListOf()
-)
-
-data class BudgetItem(val name: String, val amount: Double)

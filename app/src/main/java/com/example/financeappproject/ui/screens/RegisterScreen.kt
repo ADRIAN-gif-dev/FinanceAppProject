@@ -1,5 +1,6 @@
 package com.example.financeappproject.ui.screens
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -25,6 +26,7 @@ fun RegisterScreen(
 ) {
     val context = LocalContext.current
     val secureStorage = remember { SecureStorage(context) }
+    val sharedPrefs = remember { context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE) }
     
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -102,37 +104,50 @@ fun RegisterScreen(
                 isLoading = true
                 errorMessage = null
 
+                val userId = UUID.randomUUID().toString()
                 val newUser = User().apply {
-                    this.user_id = UUID.randomUUID().toString()
+                    this.user_id = userId
                     this.name = name
                     this.email = email
                     this.password_hash = password
                     this.biometric_token = "none"
                 }
 
-                val api = RetrofitClient.getSupabaseApi()
-                api.createUser(SupabaseConfig.API_KEY, "Bearer ${SupabaseConfig.API_KEY}", newUser)
-                    .enqueue(object : Callback<Void?> {
-                        override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
-                            isLoading = false
-                            if (response.isSuccessful) {
-                                // Store the user name for greetings
-                                secureStorage.saveCredentials(email, "stored_token")
-                                // Hacky way to store just the name for now without a full User session manager
-                                val sharedPrefs = context.getSharedPreferences("user_prefs", android.content.Context.MODE_PRIVATE)
-                                sharedPrefs.edit().putString("user_name", name).apply()
-                                
-                                onRegisterSuccess()
-                            } else {
-                                errorMessage = "Registration failed. Try again."
+                RetrofitClient.getSupabaseApi().createUser(
+                    SupabaseConfig.API_KEY, 
+                    "Bearer ${SupabaseConfig.API_KEY}", 
+                    newUser
+                ).enqueue(object : Callback<Void?> {
+                    override fun onResponse(call: Call<Void?>, response: Response<Void?>) {
+                        isLoading = false
+                        if (response.isSuccessful) {
+                            // 1. Save to session SharedPreferences
+                            sharedPrefs.edit().apply {
+                                putString("user_id", userId)
+                                putString("user_name", name)
+                                putString("user_email", email)
+                                apply()
                             }
+                            
+                            // 2. Store securely for future biometric logins
+                            secureStorage.saveCredentials(
+                                userId = userId,
+                                name = name,
+                                email = email,
+                                token = "session_token_$userId"
+                            )
+                            
+                            onRegisterSuccess()
+                        } else {
+                            errorMessage = "Registration failed. Try again."
                         }
+                    }
 
-                        override fun onFailure(call: Call<Void?>, t: Throwable) {
-                            isLoading = false
-                            errorMessage = "Connection error: ${t.message}"
-                        }
-                    })
+                    override fun onFailure(call: Call<Void?>, t: Throwable) {
+                        isLoading = false
+                        errorMessage = "Connection error: ${t.message}"
+                    }
+                })
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading && email.isNotEmpty() && password.isNotEmpty() && name.isNotEmpty()
